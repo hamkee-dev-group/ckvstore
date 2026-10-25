@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     cfg.max_value_bytes = 1024 * 1024;
     cfg.max_index_entries = 100000;
     cfg.initial_index_capacity = 1024;
-    cfg.fsync_policy = CKV_FSYNC_OFF;
+    cfg.fsync_policy = CKV_FSYNC_ON_COMMIT;
     cfg.fsync_period_records = 1024;
 
     struct ckv_store *st = NULL;

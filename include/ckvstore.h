@@ -6,7 +6,9 @@
  * Public API (v1)
  *
  * Keys and values are treated as binary blobs.
- * Single-writer, single-process semantics.
+ * Single-writer, single-process semantics: one open handle per database file,
+ * with all access to that handle serialized by the caller. No file locking.
+ * Distinct database files may be used independently from different threads.
  */
 
 #include <stddef.h>
@@ -48,12 +50,18 @@ struct ckv_config {
 };
 
 enum ckv_err ckv_open(const struct ckv_config *cfg, struct ckv_store **out);
+/* Close releases resources; it does not flush pending periodic/off writes. */
 void ckv_close(struct ckv_store *st);
 
+/* EINVAL/EFULL/ENOMEM leave the log unchanged. After a write returns EIO,
+ * close/reopen is required; the failed operation may be present after recovery.
+ * ON_COMMIT waits for fsync; PERIODIC counts put/del records, not elapsed time. */
 enum ckv_err ckv_put(struct ckv_store *st,
                      const void *key, size_t klen,
                      const void *val, size_t vlen);
 
+/* A NULL output buffer queries size only. A successful value read verifies CRC.
+ * Output bytes must be ignored on error. */
 enum ckv_err ckv_get(struct ckv_store *st,
                      const void *key, size_t klen,
                      void *out_buf, size_t out_cap,
@@ -61,9 +69,12 @@ enum ckv_err ckv_get(struct ckv_store *st,
 
 enum ckv_err ckv_del(struct ckv_store *st, const void *key, size_t klen);
 
+/* Compaction preserves the original until rename succeeds. On EIO, close/reopen
+ * before further use; replacement may have occurred even though sync failed. */
 enum ckv_err ckv_compact(struct ckv_store *st);
 
-/* Iterator over live keys (order unspecified). */
+/* Iterator over live keys (order unspecified). Do not mutate while iterating.
+ * NULL key_buf or EBUF_TOO_SMALL leaves the current key available for retry. */
 struct ckv_iter {
     size_t _pos;
 };

@@ -4,7 +4,7 @@ RANLIB ?= ranlib
 
 CFLAGS ?= -O2
 CFLAGS += -std=c11 -Wall -Wextra -Wpedantic -Werror -fno-common
-CPPFLAGS += -Iinclude -Isrc
+CPPFLAGS += -Iinclude -Isrc -D_FILE_OFFSET_BITS=64
 
 LIB = libckvstore.a
 LIB_OBJS = \
@@ -20,6 +20,7 @@ CLI_OBJS = cli/ckvcli.o
 
 TESTBIN = ckvtests
 TESTS_OBJS = tests/tests.o
+FAULTBIN = ckvfaults
 
 .PHONY: all clean test
 
@@ -38,8 +39,12 @@ $(TESTBIN): $(TESTS_OBJS) $(LIB)
 %.o: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-test: $(TESTBIN)
+$(FAULTBIN): tests/faults.c src/ckv_store.c src/ckv_index.c src/ckv_log.c src/ckv_io.c $(LIB)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ tests/faults.c $(LIB)
+
+test: $(TESTBIN) $(FAULTBIN)
 	./$(TESTBIN)
+	./$(FAULTBIN)
 
 clean:
-	rm -f $(LIB_OBJS) $(CLI_OBJS) $(TESTS_OBJS) $(LIB) $(CLI) $(TESTBIN)
+	rm -f $(LIB_OBJS) $(CLI_OBJS) $(TESTS_OBJS) $(LIB) $(CLI) $(TESTBIN) $(FAULTBIN)

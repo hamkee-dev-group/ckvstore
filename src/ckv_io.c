@@ -31,6 +31,7 @@ int ckv_pwrite_full(int fd, const void *buf, size_t n, off_t off) {
             if (errno == EINTR) continue;
             return -1;
         }
+        if (r == 0) { errno = EIO; return -1; }
         put += (size_t)r;
     }
     return 0;
@@ -45,6 +46,7 @@ int ckv_write_full(int fd, const void *buf, size_t n) {
             if (errno == EINTR) continue;
             return -1;
         }
+        if (r == 0) { errno = EIO; return -1; }
         put += (size_t)r;
     }
     return 0;
@@ -64,7 +66,7 @@ int ckv_fsync_dir_of_path(const char *path) {
     char dirbuf[4096];
     const char *dir = ".";
     if (slash) {
-        size_t len = (size_t)(slash - path);
+        size_t len = slash == path ? 1 : (size_t)(slash - path);
         if (len >= sizeof(dirbuf)) return -1;
         memcpy(dirbuf, path, len);
         dirbuf[len] = '\0';

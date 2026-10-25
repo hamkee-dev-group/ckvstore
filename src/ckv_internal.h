@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+_Static_assert(sizeof(off_t) >= 8, "ckvstore requires 64-bit file offsets");
+
 #define CKV_MAGIC 0x434B5631u /* 'C''K''V''1' */
 
 #define CKV_VERSION 1u

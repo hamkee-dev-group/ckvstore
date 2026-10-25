@@ -56,6 +56,8 @@ int ckv_log_append_put(int fd, const struct ckv_codec_limits *lim,
     if (klen > lim->max_key || vlen > lim->max_val) return -1;
     off_t off0;
     if (get_eof_offset(fd, &off0) != 0) return -1;
+    if (off0 < 0 || (uint64_t)off0 > INT64_MAX - 18u - (uint64_t)klen - vlen)
+        return -1;
 
     struct ckv_rec_hdr h;
     h.magic = CKV_MAGIC;
@@ -85,6 +87,8 @@ int ckv_log_append_del(int fd, const struct ckv_codec_limits *lim,
     if (klen > lim->max_key) return -1;
     off_t off0;
     if (get_eof_offset(fd, &off0) != 0) return -1;
+    if (off0 < 0 || (uint64_t)off0 > INT64_MAX - 18u - (uint64_t)klen)
+        return -1;
 
     struct ckv_rec_hdr h;
     h.magic = CKV_MAGIC;
@@ -116,19 +120,24 @@ int ckv_log_read_next(int fd, const struct ckv_codec_limits *lim,
     uint8_t hdrb[18];
     off_t off = *io_off;
 
-    /* Attempt to read header; if EOF, return 1. */
-    ssize_t r = pread(fd, hdrb, sizeof(hdrb), off);
-    if (r == 0) return 1;
-    if (r < 0) return -1;
-    if ((size_t)r < sizeof(hdrb)) return -1;
+    /* Distinguish an incomplete tail from corruption and read errors. */
+    off_t end;
+    if (get_eof_offset(fd, &end) != 0) return -2;
+    if (off < 0 || off > end) return -1;
+    if (off == end) return 1;
+    if (end - off < (off_t)sizeof(hdrb)) return 2;
+    if (ckv_pread_full(fd, hdrb, sizeof(hdrb), off) != 0) return -2;
 
     struct ckv_rec_hdr h;
     ckv_rec_hdr_decode(&h, hdrb);
     if (h.magic != CKV_MAGIC || h.version != CKV_VERSION) return -1;
     if (!(h.type == CKV_REC_PUT || h.type == CKV_REC_DEL)) return -1;
-    if (h.key_len > lim->max_key) return -1;
+    if (h.key_len == 0) return -1;
+    if (h.key_len > lim->max_key) return -3;
     if (h.type == CKV_REC_DEL && h.val_len != 0) return -1;
-    if (h.type == CKV_REC_PUT && h.val_len > lim->max_val) return -1;
+    if (h.type == CKV_REC_PUT && h.val_len > lim->max_val) return -3;
+    if ((uint64_t)h.key_len + h.val_len >
+        (uint64_t)(end - off - (off_t)sizeof(hdrb))) return 2;
 
     off_t payload_off = off + (off_t)sizeof(hdrb);
     uint32_t klen = h.key_len;
@@ -137,14 +146,14 @@ int ckv_log_read_next(int fd, const struct ckv_codec_limits *lim,
     /* Read payload (or skip). */
     if (klen) {
         if (key_buf) {
-            if (ckv_pread_full(fd, key_buf, klen, payload_off) != 0) return -1;
+            if (ckv_pread_full(fd, key_buf, klen, payload_off) != 0) return -2;
         } else {
             uint8_t tmp[256];
             uint32_t left = klen;
             off_t o = payload_off;
             while (left) {
                 size_t chunk = left > sizeof(tmp) ? sizeof(tmp) : (size_t)left;
-                if (ckv_pread_full(fd, tmp, chunk, o) != 0) return -1;
+                if (ckv_pread_full(fd, tmp, chunk, o) != 0) return -2;
                 o += (off_t)chunk;
                 left -= (uint32_t)chunk;
             }
@@ -153,14 +162,14 @@ int ckv_log_read_next(int fd, const struct ckv_codec_limits *lim,
     }
     if (vlen) {
         if (val_buf) {
-            if (ckv_pread_full(fd, val_buf, vlen, payload_off) != 0) return -1;
+            if (ckv_pread_full(fd, val_buf, vlen, payload_off) != 0) return -2;
         } else {
             uint8_t tmp[256];
             uint32_t left = vlen;
             off_t o = payload_off;
             while (left) {
                 size_t chunk = left > sizeof(tmp) ? sizeof(tmp) : (size_t)left;
-                if (ckv_pread_full(fd, tmp, chunk, o) != 0) return -1;
+                if (ckv_pread_full(fd, tmp, chunk, o) != 0) return -2;
                 o += (off_t)chunk;
                 left -= (uint32_t)chunk;
             }
@@ -187,7 +196,7 @@ int ckv_log_read_next(int fd, const struct ckv_codec_limits *lim,
             off_t o = data_off;
             while (left) {
                 size_t chunk = left > sizeof(tmp) ? sizeof(tmp) : (size_t)left;
-                if (ckv_pread_full(fd, tmp, chunk, o) != 0) return -1;
+                if (ckv_pread_full(fd, tmp, chunk, o) != 0) return -2;
                 crc = ckv_crc32_update(crc, tmp, chunk);
                 o += (off_t)chunk;
                 left -= (uint32_t)chunk;
@@ -204,7 +213,7 @@ int ckv_log_read_next(int fd, const struct ckv_codec_limits *lim,
             off_t o = data_off;
             while (left) {
                 size_t chunk = left > sizeof(tmp) ? sizeof(tmp) : (size_t)left;
-                if (ckv_pread_full(fd, tmp, chunk, o) != 0) return -1;
+                if (ckv_pread_full(fd, tmp, chunk, o) != 0) return -2;
                 crc = ckv_crc32_update(crc, tmp, chunk);
                 o += (off_t)chunk;
                 left -= (uint32_t)chunk;

@@ -40,8 +40,11 @@ int ckv_log_append_del(int fd, const struct ckv_codec_limits *lim,
  *
  * Returns:
  *  0 success
- *  1 EOF (no more complete records)
- * -1 corrupt/incomplete tail (stop scanning)
+ *  1 clean EOF
+ *  2 incomplete final record (caller may truncate to *io_off)
+ * -1 corrupt record
+ * -2 I/O error
+ * -3 record exceeds configured limits (never truncate)
  */
 int ckv_log_read_next(int fd, const struct ckv_codec_limits *lim,
                       off_t *io_off,

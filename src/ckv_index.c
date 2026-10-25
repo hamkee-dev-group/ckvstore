@@ -5,7 +5,10 @@
 
 static size_t round_up_pow2(size_t x) {
     size_t p = 1;
-    while (p < x) p <<= 1;
+    while (p < x) {
+        if (p > SIZE_MAX / 2) return 0;
+        p <<= 1;
+    }
     return p;
 }
 
@@ -22,6 +25,7 @@ uint64_t ckv_hash64(const void *data, size_t len) {
 
 int ckv_index_init(struct ckv_index *ix, size_t cap) {
     cap = round_up_pow2(cap < 16 ? 16 : cap);
+    if (cap == 0 || cap > SIZE_MAX / sizeof(*ix->tab)) return -1;
     ix->tab = (struct ckv_index_entry *)calloc(cap, sizeof(*ix->tab));
     if (!ix->tab) return -1;
     ix->cap = cap;
@@ -117,7 +121,15 @@ struct ckv_index_entry *ckv_index_put(struct ckv_index *ix,
                                       uint64_t hash,
                                       uint32_t vlen, off_t rec_off,
                                       int *out_new_key) {
+    struct ckv_index_entry *existing = ckv_index_find(ix, key, klen, hash);
+    if (existing) {
+        existing->vlen = vlen;
+        existing->rec_off = rec_off;
+        if (out_new_key) *out_new_key = 0;
+        return existing;
+    }
     if (should_grow(ix)) {
+        if (ix->cap > SIZE_MAX / 2) return NULL;
         if (ckv_index_rehash(ix, ix->cap * 2) != 0) return NULL;
     }
 
