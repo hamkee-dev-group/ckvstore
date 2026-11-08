@@ -1,0 +1,24 @@
+# Build products
+*.o
+*.d
+*.a
+*.so
+/ckvcli
+/ckvtests
+/ckvfaults
+
+# Test, sanitizer and coverage output
+*.log
+*.gcda
+*.gcno
+*.gcov
+core
+core.*
+vgcore.*
+
+# Editors and OS
+*.swp
+*~
+.DS_Store
+/.vscode/
+/.idea/
