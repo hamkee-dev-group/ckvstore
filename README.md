@@ -84,3 +84,7 @@ These guarantees depend on filesystem and device sync behavior. This patch uses
 POSIX `fsync`, not macOS-specific `F_FULLFSYNC`, and does not claim physical
 power-loss certification. The failure tests exercise software error handling;
 they do not simulate every storage device or filesystem failure mode.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
